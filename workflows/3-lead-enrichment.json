@@ -1,0 +1,157 @@
+{
+  "name": "3 \u2014 Lead Enrichment + AI Tailored Outreach (Replaces $40/mo Zapier)",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1abcDemoSheetId",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "New Leads",
+          "mode": "list"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "wf3-trigger",
+      "name": "New Lead Added",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://company.clearbit.com/v2/companies/find?domain={{ $json.email.split('@')[1] }}",
+        "options": {}
+      },
+      "id": "wf3-http",
+      "name": "Enrich (Clearbit)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull company description from enrichment response\nconst data = $input.first().json;\nreturn [{json: {\n  name: $('New Lead Added').item.json.name,\n  company: data.name || $('New Lead Added').item.json.company,\n  description: data.description || '',\n  industry: data.category?.industry || '',\n  rowNumber: $('New Lead Added').item.json.row_number\n}}];"
+      },
+      "id": "wf3-code",
+      "name": "Extract Description",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Contact: {{ $json.name }}\nCompany: {{ $json.company }}\nWhat I know: {{ $json.description }}",
+        "options": {
+          "systemMessage": "You are an outbound sales assistant. Write a single sentence, maximum twenty words, that references something specific about this company and connects it to a problem a growing business might have. Do not use the word synergy, leverage, or excited. Sound like a person."
+        }
+      },
+      "id": "wf3-agent",
+      "name": "AI Agent (Tailored Intro)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        900,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1abcDemoSheetId",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "New Leads",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Extract Description').item.json.rowNumber }}",
+            "intro_line": "={{ $json.output }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "wf3-update",
+      "name": "Sheets: Write Intro Line",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1140,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "New Lead Added": {
+      "main": [
+        [
+          {
+            "node": "Enrich (Clearbit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich (Clearbit)": {
+      "main": [
+        [
+          {
+            "node": "Extract Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Description": {
+      "main": [
+        [
+          {
+            "node": "AI Agent (Tailored Intro)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Tailored Intro)": {
+      "main": [
+        [
+          {
+            "node": "Sheets: Write Intro Line",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
