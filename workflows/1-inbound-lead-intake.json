@@ -1,0 +1,194 @@
+{
+  "name": "1 \u2014 Inbound Lead Intake (Replaces Zapier)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-intake",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wf1-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        360
+      ],
+      "webhookId": "lead-intake-demo"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse contact form submission into clean fields\nconst body = $input.first().json.body || {};\nreturn [{\n  json: {\n    name: body.name || 'Unknown',\n    email: body.email || '',\n    message: body.message || '',\n    received_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "wf1-code",
+      "name": "Parse Form Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Lead name: {{ $json.name }}\nLead email: {{ $json.email }}\nLead message: {{ $json.message }}",
+        "options": {
+          "systemMessage": "You are a lead qualification assistant. Based on the contact form submission, classify the lead as hot, warm, or cold. Hot means they mentioned a specific budget, timeline, or urgent problem. Warm means they're interested but vague. Cold means they're just browsing. Return only one word: hot, warm, or cold."
+        }
+      },
+      "id": "wf1-agent",
+      "name": "AI Agent (Classify Lead)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        680,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "hot-check",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "hot",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf1-if",
+      "name": "Is Hot Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        920,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#sales-hot-leads",
+          "mode": "name"
+        },
+        "text": "=:fire: Hot lead \u2014 {{ $('Parse Form Fields').item.json.name }} ({{ $('Parse Form Fields').item.json.email }})\nMessage: {{ $('Parse Form Fields').item.json.message }}\nReply within the hour.",
+        "otherOptions": {}
+      },
+      "id": "wf1-slack",
+      "name": "Slack: Alert Sales",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1180,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1abcDemoSheetId",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $('Parse Form Fields').item.json.name }}",
+            "Email": "={{ $('Parse Form Fields').item.json.email }}",
+            "Message": "={{ $('Parse Form Fields').item.json.message }}",
+            "Status": "={{ $json.output }}"
+          },
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "wf1-sheets",
+      "name": "Sheets: File for Later",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1180,
+        480
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Form Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Form Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Agent (Classify Lead)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Classify Lead)": {
+      "main": [
+        [
+          {
+            "node": "Is Hot Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Hot Lead?": {
+      "main": [
+        [
+          {
+            "node": "Slack: Alert Sales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheets: File for Later",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
