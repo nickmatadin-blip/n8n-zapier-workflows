@@ -1,0 +1,217 @@
+{
+  "name": "2 \u2014 Daily AI Digest (Replaces Multi-Step Zap)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "wf2-schedule",
+      "name": "Daily 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://news.ycombinator.com/rss",
+        "options": {}
+      },
+      "id": "wf2-http1",
+      "name": "Source 1: Hacker News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.theoperatorai.io/articles/feed.xml",
+        "options": {}
+      },
+      "id": "wf2-http2",
+      "name": "Source 2: Industry Blog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.feedburner.com/oreilly/radar",
+        "options": {}
+      },
+      "id": "wf2-http3",
+      "name": "Source 3: Radar Feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract top 3 titles + links from each RSS feed\nconst items = $input.all();\nconst extracted = items.flatMap(item => {\n  const xml = item.json.data || '';\n  const matches = [...xml.matchAll(/<item>[\\s\\S]*?<title>(.*?)<\\/title>[\\s\\S]*?<link>(.*?)<\\/link>/g)];\n  return matches.slice(0, 3).map(m => ({title: m[1], link: m[2]}));\n});\nreturn extracted.map(e => ({json: e}));"
+      },
+      "id": "wf2-code",
+      "name": "Parse RSS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "id": "wf2-merge",
+      "name": "Merge All Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here are today's items:\n{{ $input.all().map(i => '- ' + i.json.title + ' (' + i.json.link + ')').join('\\n') }}",
+        "options": {
+          "systemMessage": "You are a concise business intelligence assistant. Read these article titles and links and write a five sentence briefing in a direct, no-fluff tone. Group similar topics. Call out anything that directly affects small business operators or solopreneurs. Start with the most important item."
+        }
+      },
+      "id": "wf2-agent",
+      "name": "AI Agent (Summarize)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "@your_telegram_username",
+        "text": "=:newspaper: Daily Briefing \u2014 {{ $now.format('MMM d') }}\n\n{{ $json.output }}",
+        "additionalFields": {}
+      },
+      "id": "wf2-telegram",
+      "name": "Telegram: Send Digest",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1340,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 8am": {
+      "main": [
+        [
+          {
+            "node": "Source 1: Hacker News",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Source 2: Industry Blog",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Source 3: Radar Feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source 1: Hacker News": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source 2: Industry Blog": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source 3: Radar Feed": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Sources": {
+      "main": [
+        [
+          {
+            "node": "AI Agent (Summarize)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Summarize)": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
